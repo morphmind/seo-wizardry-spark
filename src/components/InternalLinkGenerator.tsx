@@ -6,6 +6,7 @@ import LinkingMethodSelector from "./internal-linking/LinkingMethodSelector";
 import ArticleInput from "./internal-linking/ArticleInput";
 import ProcessButton from "./internal-linking/ProcessButton";
 import LinkReport from "./internal-linking/LinkReport";
+import { PresetManager } from "./internal-linking/PresetManager";
 import { useContentProcessor, ProcessedLink } from "./internal-linking/LinkProcessor";
 
 const InternalLinkGenerator = () => {
@@ -38,11 +39,43 @@ const InternalLinkGenerator = () => {
     });
   };
 
+  const handleLoadPreset = async (preset: {
+    urlDatabase: string;
+    linkingMethod: "manual" | "auto";
+    manualLinkCount: string;
+  }) => {
+    // URL database'i File nesnesine dönüştür
+    const blob = new Blob([preset.urlDatabase], { type: 'application/json' });
+    const file = new File([blob], 'preset-database.json', { type: 'application/json' });
+    
+    setUrlDatabase(file);
+    setLinkingMethod(preset.linkingMethod);
+    setManualLinkCount(preset.manualLinkCount);
+  };
+
+  const handleSavePreset = () => {
+    return {
+      urlDatabase,
+      linkingMethod,
+      manualLinkCount,
+    };
+  };
+
   return (
     <div className="space-y-6">
       <Card>
         <CardContent className="pt-6">
           <div className="space-y-4">
+            <div className="space-y-2">
+              <PresetManager
+                onLoad={handleLoadPreset}
+                onSave={handleSavePreset}
+                urlDatabase={urlDatabase}
+                linkingMethod={linkingMethod}
+                manualLinkCount={manualLinkCount}
+              />
+            </div>
+
             <FileUploader 
               onFileUpload={setUrlDatabase}
               urlDatabase={urlDatabase}
