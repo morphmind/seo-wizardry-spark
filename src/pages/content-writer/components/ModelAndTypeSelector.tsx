@@ -33,6 +33,14 @@ export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndType
     }
   };
 
+  const handleArticleUrlChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
+    field.onChange(e);
+    const keyword = extractKeywordFromURL(e.target.value);
+    if (keyword) {
+      control.setValue('targetKeyword', keyword, { shouldValidate: true });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -267,13 +275,7 @@ export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndType
                   {...field}
                   value={field.value || ""}
                   placeholder="https://..."
-                  onChange={(e) => {
-                    field.onChange(e);
-                    const keyword = extractKeywordFromURL(e.target.value);
-                    if (keyword) {
-                      control.setValue('targetKeyword', keyword);
-                    }
-                  }}
+                  onChange={(e) => handleArticleUrlChange(e, field)}
                 />
               )}
             />

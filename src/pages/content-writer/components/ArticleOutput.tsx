@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Download, Upload } from "lucide-react";
+import { Loader2, Copy, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ArticleHistory } from "../types";
 import DOMPurify from 'dompurify';
@@ -33,14 +33,17 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
   const [isSaved, setIsSaved] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const extractTitle = useCallback((html: string): string => {
+    const match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
+    return match ? match[1].replace(/<[^>]*>/g, '') : "Untitled Article";
+  }, []);
+
   const processHTML = useCallback((html: string): string => {
-    // Temel HTML temizleme
     let processedHtml = DOMPurify.sanitize(html, {
       ADD_TAGS: ['iframe'],
       ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'loading']
     });
 
-    // Koala.sh görsellerine change butonu ekle
     processedHtml = processedHtml.replace(
       /<img(.*?)src="(https:\/\/koala\.sh\/.*?)"(.*?)>/gi,
       `<div class="relative group">
@@ -58,13 +61,12 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
       </div>`
     );
 
-    // window objesine uploadToGoogleDrive fonksiyonunu ekle
     if (typeof window !== 'undefined') {
       (window as any).uploadToGoogleDrive = uploadToGoogleDrive;
     }
 
     return processedHtml;
-  }, [toast]);
+  }, []);
 
   const uploadToGoogleDrive = async (imageUrl: string, imageElement: HTMLImageElement) => {
     const googleDriveApiKey = localStorage.getItem("google_drive_api_key");
@@ -78,11 +80,9 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
     }
 
     try {
-      // Görseli fetch et
       const response = await fetch(imageUrl);
       const blob = await response.blob();
 
-      // Google Drive'a yükle
       const formData = new FormData();
       formData.append('file', blob, 'image.jpg');
 
@@ -100,7 +100,6 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
 
       const uploadResult = await uploadResponse.json();
       
-      // Google Drive paylaşım linkini al
       const shareResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadResult.id}?fields=webContentLink`, {
         method: 'GET',
         headers: {
@@ -113,8 +112,6 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
       }
 
       const shareResult = await shareResponse.json();
-      
-      // Görsel kaynağını güncelle
       imageElement.src = shareResult.webContentLink;
       
       toast({
@@ -183,10 +180,34 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
     checkStatus();
   }, [articleId, apiKey, toast, onSaveToHistory, extractTitle, processHTML, isSaved]);
 
-  const extractTitle = useCallback((html: string): string => {
-    const match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
-    return match ? match[1].replace(/<[^>]*>/g, '') : "Untitled Article";
-  }, []);
+  const handleCopy = async () => {
+    if (!article?.output?.html) return;
+    try {
+      await navigator.clipboard.writeText(article.output.html);
+      toast({
+        description: "Content copied to clipboard",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to copy content",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownload = () => {
+    if (!article?.output?.html) return;
+    const blob = new Blob([article.output.html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'article.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (!article) return null;
 
