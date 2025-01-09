@@ -1,306 +1,162 @@
-import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Loader2, Copy, Download } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { IdeaHistory } from "./IdeaHistory";
-import { generateContentIdeasPDF } from "@/utils/pdfUtils";
-import { generateIdeasWithOpenAI } from "@/services/openai";
-import { v4 as uuidv4 } from 'uuid';
+import { toast } from "@/hooks/use-toast";
 
 interface IdeaResult {
-  title: string;
-  description: string;
+    title: string;
+    description: string;
 }
 
-interface AIResponse {
-  gpt4Ideas: IdeaResult[];
-  gptMiniIdeas: IdeaResult[];
+interface OpenAIConfig {
+    apiKey: string;
+    model: string;
+    temperature?: number;
+    maxTokens?: number;
 }
 
-interface IdeaHistoryItem {
-  id: string;
-  topic: string;
-  date: string;
-  gpt4Ideas: IdeaResult[];
-  gptMiniIdeas: IdeaResult[];
-}
+class OpenAIService {
+    private baseUrl = "https://api.openai.com/v1/chat/completions";
+    private retryCount = 3;
+    private retryDelay = 1000;
 
-const ContentIdeas = () => {
-  const [topic, setTopic] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<AIResponse | null>(null);
-  const [ideas, setIdeas] = useState<IdeaHistoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem("idea_history");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const { toast } = useToast();
+    private async makeRequest(config: OpenAIConfig, messages: any[]): Promise<any> {
+        let lastError: Error | null = null;
 
-  const handleSaveToHistory = (gpt4Ideas: IdeaResult[], gptMiniIdeas: IdeaResult[]) => {
-    const newIdea: IdeaHistoryItem = {
-      id: uuidv4(),
-      topic,
-      date: new Date().toISOString(),
-      gpt4Ideas,
-      gptMiniIdeas
-    };
+        for (let attempt = 1; attempt <= this.retryCount; attempt++) {
+            try {
+                const response = await fetch(this.baseUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${config.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: config.model,
+                        messages,
+                        temperature: config.temperature ?? 0.7,
+                        max_tokens: config.maxTokens ?? 2000
+                    })
+                });
 
-    const newIdeas = [newIdea, ...ideas];
-    setIdeas(newIdeas);
-    try {
-      localStorage.setItem("idea_history", JSON.stringify(newIdeas));
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error);
-      if (error.name === 'QuotaExceededError') {
-        const reducedIdeas = newIdeas.slice(0, -1);
-        localStorage.setItem("idea_history", JSON.stringify(reducedIdeas));
-        setIdeas(reducedIdeas);
-      }
-    }
-  };
+                if (response.status === 400) {
+                    const errorData = await response.json();
+                    throw new Error(errorData?.error?.message || "HTTP 400 Bad Request");
+                }
 
-  const handleDeleteFromHistory = (id: string) => {
-    const newIdeas = ideas.filter(idea => idea.id !== id);
-    setIdeas(newIdeas);
-    try {
-      localStorage.setItem("idea_history", JSON.stringify(newIdeas));
-    } catch (error) {
-      console.error('Failed to update localStorage:', error);
-    }
-  };
+                const data = await response.json();
 
-  const copyToClipboard = (title: string, description: string) => {
-    try {
-      const text = `${title}\n\n${description}`;
-      const el = document.createElement('div');
-      el.setAttribute('contenteditable', 'true');
-      el.innerHTML = text;
-      el.style.position = 'fixed';
-      el.style.left = '-9999px';
-      document.body.appendChild(el);
-      const selected = document.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      selected?.removeAllRanges();
-      selected?.addRange(range);
-      document.execCommand('copy');
-      document.body.removeChild(el);
-      
-      toast({
-        description: "İçerik kopyalandı",
-      });
-    } catch (error) {
-      console.error('Kopyalama hatası:', error);
-      toast({
-        title: "Hata",
-        description: "Manuel olarak seçip kopyalayınız",
-        variant: "destructive"
-      });
-    }
-  };
+                if (!response.ok) {
+                    throw new Error(data?.error?.message || `HTTP error ${response.status}`);
+                }
 
-  const handleGeneratePDF = () => {
-    if (!results) return;
+                return data;
 
-    const pdfContent = {
-      topic,
-      gpt4Ideas: results.gpt4Ideas,
-      gptMiniIdeas: results.gptMiniIdeas
-    };
+            } catch (error) {
+                lastError = error as Error;
+                console.error(`Attempt ${attempt} failed for ${config.model}:`, error);
 
-    try {
-      const pdf = generateContentIdeasPDF(pdfContent);
-      const safeFileName = topic
-        .toLowerCase()
-        .replace(/[çÇ]/g, 'c')
-        .replace(/[ğĞ]/g, 'g')
-        .replace(/[ıİ]/g, 'i')
-        .replace(/[öÖ]/g, 'o')
-        .replace(/[şŞ]/g, 's')
-        .replace(/[üÜ]/g, 'u')
-        .replace(/[^a-z0-9]+/g, '_')
-        .trim();
-      
-      pdf.save(`Oneriler_Raporu_${safeFileName}.pdf`);
-
-      toast({
-        description: "PDF başarıyla indirildi"
-      });
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      toast({
-        title: "Hata",
-        description: "PDF oluşturulurken bir hata oluştu",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const generateIdeas = async () => {
-    if (!topic.trim()) {
-      toast({
-        title: "Konu Gerekli",
-        description: "Lütfen bir konu girin",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const apiKey = localStorage.getItem("openai_api_key");
-    if (!apiKey) {
-      toast({
-        title: "API Anahtarı Eksik",
-        description: "Lütfen OpenAI API anahtarınızı ayarlarda belirtin",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { gpt4Ideas, gptMiniIdeas } = await generateIdeasWithOpenAI(topic, apiKey);
-
-      const newResults = { gpt4Ideas, gptMiniIdeas };
-
-      // Only update state and save to history if we have valid results
-      if (gpt4Ideas.length > 0 || gptMiniIdeas.length > 0) {
-        setResults(newResults);
-        handleSaveToHistory(gpt4Ideas, gptMiniIdeas);
-        toast({
-          description: "İçerik fikirleri başarıyla oluşturuldu"
-        });
-      } else {
-        toast({
-          title: "Uyarı",
-          description: "İçerik fikirleri oluşturulamadı. Lütfen tekrar deneyin.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error("API Error:", error);
-      
-      let errorMessage = "İçerik fikirleri üretilirken bir hata oluştu";
-      let errorTitle = "Hata";
-
-      if (error instanceof Error) {
-        if (error.message.includes("API key")) {
-          errorTitle = "API Anahtarı Hatası";
-          errorMessage = "Lütfen OpenAI API anahtarınızı kontrol edin";
-        } else if (error.message.includes("rate limit")) {
-          errorTitle = "Hız Sınırı";
-          errorMessage = "Çok fazla istek gönderildi. Lütfen biraz bekleyin";
-        } else {
-          errorMessage = error.message;
+                if (attempt < this.retryCount) {
+                    await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
+                    continue;
+                }
+            }
         }
-      }
 
-      toast({
-        title: errorTitle,
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+        throw lastError || new Error("Failed after multiple attempts");
     }
-  };
 
-  return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            placeholder="Blog konusunu girin..."
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            className="flex-1"
-          />
-          <Button 
-            onClick={generateIdeas}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Üretiliyor...
-              </>
-            ) : (
-              "Fikir Üret"
-            )}
-          </Button>
-        </div>
+    public async generateIdeas(
+        topic: string,
+        apiKey: string
+    ): Promise<{
+        gpt4Ideas: IdeaResult[];
+        gptMiniIdeas: IdeaResult[];
+    }> {
+        const systemPrompt = 
+            "Sen bir SEO ve içerik uzmanısın. Verilen konuyla ilgili ilgi çekici, " +
+            "SEO dostu ve özgün blog başlıkları üretmelisin. Her başlık için kısa " +
+            "bir açıklama da ekle.";
 
-        {results && (
-          <>
-            <div className="flex justify-end">
-              <Button
-                onClick={handleGeneratePDF}
-                variant="outline"
-                className="mb-4"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                PDF İndir
-              </Button>
-            </div>
+        const userPrompt = 
+            `Konu: ${topic}\n\n` +
+            "Bu konuyla ilgili 5 adet blog yazısı başlığı üret. " +
+            "Her başlık için 1-2 cümlelik açıklama ekle. Başlıklar SEO dostu ve ilgi çekici olmalı. " +
+            'Yanıt formatı JSON olmalı: { "ideas": [{ "title": "başlık", "description": "açıklama" }] }';
 
-            <div className="grid grid-cols-2 gap-6">
-              {/* GPT-4 Önerileri */}
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Öneriler 1</h3>
-                  <div className="space-y-4">
-                    {results.gpt4Ideas.map((idea, index) => (
-                      <div key={index} className="p-4 border rounded-lg group relative">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => copyToClipboard(idea.title, idea.description)}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <h4 className="font-medium text-primary pr-8">{idea.title}</h4>
-                        <p className="text-sm text-muted-foreground mt-1">{idea.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+        const messages = [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+        ];
 
-              {/* o1-mini Önerileri */}
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold mb-4">Öneriler 2</h3>
-                  <div className="space-y-4">
-                    {results.gptMiniIdeas.map((idea, index) => (
-                      <div key={index} className="p-4 border rounded-lg group relative">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => copyToClipboard(idea.title, idea.description)}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <h4 className="font-medium text-primary pr-8">{idea.title}</h4>
-                        <p className="text-sm text-muted-foreground mt-1">{idea.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-      </div>
+        try {
+            let gpt4Ideas: IdeaResult[] = [];
+            let gptMiniIdeas: IdeaResult[] = [];
 
-      <IdeaHistory ideas={ideas} onDelete={handleDeleteFromHistory} />
-    </div>
-  );
-};
+            try {
+                const gpt4Response = await this.makeRequest({
+                    apiKey,
+                    model: "gpt-4o-mini",
+                    temperature: 0.7
+                }, messages);
 
-export default ContentIdeas;
+                gpt4Ideas = this.parseIdeas(gpt4Response);
+            } catch (err) {
+                console.error("GPT-4 request failed:", err);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            try {
+                const gptMiniResponse = await this.makeRequest({
+                    apiKey,
+                    model: "gpt-4",
+                    temperature: 0.9,
+                    maxTokens: 1000
+                }, messages);
+
+                gptMiniIdeas = this.parseIdeas(gptMiniResponse);
+            } catch (err) {
+                console.error("GPT-Mini request failed:", err);
+            }
+
+            if (!gpt4Ideas.length && !gptMiniIdeas.length) {
+                throw new Error("No valid ideas generated from either model");
+            }
+
+            return { gpt4Ideas, gptMiniIdeas };
+
+        } catch (error) {
+            console.error("API Error:", error);
+            throw error;
+        }
+    }
+
+    private parseIdeas(response: any): IdeaResult[] {
+        try {
+            const content = response?.choices?.[0]?.message?.content;
+            if (!content) {
+                console.error("Empty response content");
+                return [];
+            }
+
+            const cleanContent = content.replace(/```json\n?|\n?```/g, "").trim();
+            const parsed = JSON.parse(cleanContent);
+
+            if (!parsed?.ideas?.length) {
+                console.error("No ideas found in response");
+                return [];
+            }
+
+            return parsed.ideas
+                .map((idea: any) => ({
+                    title: idea.title?.trim() || "",
+                    description: idea.description?.trim() || ""
+                }))
+                .filter(idea => idea.title && idea.description);
+
+        } catch (error) {
+            console.error("Parse error:", error);
+            return [];
+        }
+    }
+}
+
+export const openAIService = new OpenAIService();
