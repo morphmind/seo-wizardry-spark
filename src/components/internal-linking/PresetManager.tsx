@@ -21,7 +21,7 @@ import {
 interface LinkBuilderPreset {
   id: string;
   name: string;
-  urlDatabase: string;
+  urlDatabase?: string;
   linkingMethod: "manual" | "auto";
   manualLinkCount: string;
 }
@@ -44,20 +44,20 @@ export function PresetManager({ onLoad, onSave, urlDatabase, linkingMethod, manu
   const [newPresetName, setNewPresetName] = useState("");
 
   const handleSavePreset = async (name: string, isUpdate = false) => {
-    if (!urlDatabase) {
-      toast({
-        title: "Hata",
-        description: "Lütfen önce bir URL database dosyası yükleyin",
-        variant: "destructive",
-      });
-      return;
+    let urlDatabaseText = "";
+    
+    if (urlDatabase) {
+      try {
+        urlDatabaseText = await urlDatabase.text();
+      } catch (error) {
+        console.error("URL database okuma hatası:", error);
+      }
     }
 
-    const urlDatabaseText = await urlDatabase.text();
     const preset = {
       id: isUpdate ? selectedPreset : crypto.randomUUID(),
       name,
-      urlDatabase: urlDatabaseText,
+      urlDatabase: urlDatabaseText || undefined,
       linkingMethod,
       manualLinkCount,
     };
