@@ -5,33 +5,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { HelpCircle, Info } from "lucide-react";
-import { FormValues } from "../types";
+import { FormValues } from "../types"; 
+import { useFormContext } from "react-hook-form";
 
 interface ModelAndTypeSelectorProps {
   control: Control<FormValues>;
   watchArticleType: string;
 }
 
+const extractKeywordFromURL = (url: string): string => {
+  try {
+    // Get the last segment of the URL path
+    const urlPath = new URL(url).pathname;
+    const segments = urlPath.split('/').filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    
+    // Remove file extension if any and replace dashes/underscores with spaces
+    return lastSegment
+      .replace(/\.[^/.]+$/, '') // Remove file extension
+      .replace(/[-_]/g, ' ') // Replace dashes and underscores with spaces
+      .split(' ')
+      .map(word => word.charAt(0).toLowerCase() + word.slice(1).toLowerCase()) // Convert to lowercase
+      .join(' ')
+      .trim();
+  } catch (error) {
+    console.error('Error extracting keyword:', error);
+    return '';
+  }
+};
+
 export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndTypeSelectorProps) {
-  const extractKeywordFromURL = (url: string) => {
-    try {
-      const urlPath = new URL(url).pathname;
-      const segments = urlPath.split('/').filter(Boolean);
-      const lastSegment = segments[segments.length - 1];
-      
-      const keyword = lastSegment
-        .replace(/[-_]/g, ' ')
-        .replace(/\.[^/.]+$/, '')
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-        
-      return keyword;
-    } catch (error) {
-      console.error('Error extracting keyword:', error);
-      return '';
-    }
-  };
+  const { setValue } = useFormContext<FormValues>();
 
   return (
     <div className="space-y-6">
@@ -270,8 +274,8 @@ export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndType
                   onChange={(e) => {
                     field.onChange(e);
                     const keyword = extractKeywordFromURL(e.target.value);
-                    if (keyword) {
-                      control.setValue('targetKeyword', keyword);
+                    if (keyword && setValue) {
+                      setValue('targetKeyword', keyword);
                     }
                   }}
                 />

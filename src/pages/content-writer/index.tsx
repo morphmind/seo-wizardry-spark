@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, FormProvider } from "react-hook-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -314,7 +314,8 @@ export default function ContentWriter() {
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <FormProvider {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               {/* Navigation Tabs */}
               <Card className="p-4 bg-accent/10">
                 <div className="flex gap-2">
@@ -414,7 +415,8 @@ export default function ContentWriter() {
 
               </Button>
 
-            </form>
+              </form>
+            </FormProvider>
 
           </CardContent>
 
