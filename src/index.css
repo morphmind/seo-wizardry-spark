@@ -161,28 +161,16 @@
   text-decoration: underline;
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.2em;
+  color: black; /* Link metni rengi siyah olarak ayarlandı */
 }
 
 .content-wrapper a:hover {
   text-decoration-thickness: 0.2em;
 }
 
-.content-wrapper table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1rem 0;
-}
-
-.content-wrapper th,
-.content-wrapper td {
-  border: 1px solid hsl(var(--border));
-  padding: 0.5rem;
-  text-align: left;
-}
-
-.content-wrapper th {
-  background-color: hsl(var(--muted));
-  font-weight: 600;
+/* Dark mode için özel ayar */
+.dark .content-wrapper a {
+  color: white; /* Dark modda link metni beyaz kalacak */
 }
 
 /* Mobile Responsive Styles */
