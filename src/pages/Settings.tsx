@@ -23,7 +23,6 @@ export default function Settings() {
   const [showAnthropic, setShowAnthropic] = useState(false);
   const [showRecraft, setShowRecraft] = useState(false);
   const [showKoala, setShowKoala] = useState(false);
-  const [showGoogleDrive, setShowGoogleDrive] = useState(false);
 
   // Password management states
   const [newLoginPassword, setNewLoginPassword] = useState('');
@@ -103,7 +102,7 @@ export default function Settings() {
     }
   };
 
-  const handleSave = (type: "openai" | "anthropic" | "recraft" | "koala" | "google_drive", value: string) => {
+  const handleSave = (type: "openai" | "anthropic" | "recraft" | "koala", value: string) => {
     if (!value.trim()) {
       toast({
         title: "Error",
@@ -354,33 +353,6 @@ export default function Settings() {
                 onClick={() => setShowKoala(!showKoala)}
               >
                 {showKoala ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Google Drive API Key</CardTitle>
-            <CardDescription>
-              Enter your Google Drive API key for image backup functionality
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <Input
-                type={showGoogleDrive ? "text" : "password"}
-                placeholder="Enter your Google Drive API key"
-                defaultValue={localStorage.getItem("google_drive_api_key") || ""}
-                onChange={(e) => handleSave("google_drive", e.target.value)}
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-                onClick={() => setShowGoogleDrive(!showGoogleDrive)}
-              >
-                {showGoogleDrive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
           </CardContent>

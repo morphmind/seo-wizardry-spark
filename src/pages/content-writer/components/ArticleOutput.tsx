@@ -33,101 +33,85 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
   const [isSaved, setIsSaved] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const extractTitle = useCallback((html: string): string => {
-    const match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
-    return match ? match[1].replace(/<[^>]*>/g, '') : "Untitled Article";
-  }, []);
-
   const processHTML = useCallback((html: string): string => {
+    // Temel HTML temizleme
     let processedHtml = DOMPurify.sanitize(html, {
       ADD_TAGS: ['iframe'],
       ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'loading']
     });
 
+    // CORS ve güvenlik ayarları ile resimleri ve iframeleri düzeltme
     processedHtml = processedHtml.replace(
-      /<img(.*?)src="(https:\/\/koala\.sh\/.*?)"(.*?)>/gi,
-      `<div class="relative group">
-        <img$1src="$2"$3>
-        <button
-          class="absolute top-2 right-2 bg-white/90 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-          onclick="window.uploadToGoogleDrive('$2', this.previousElementSibling)"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-        </button>
+      /<img(.*?)src="(.*?)"(.*?)>/gi,
+      '<img$1src="$2" crossorigin="anonymous" loading="lazy" onerror="this.src=\'/placeholder.jpg\';" style="max-width: 100%; height: auto; display: block; margin: 1rem auto;"$3>'
+    );
+
+    // YouTube iframelerini düzenleme
+    processedHtml = processedHtml.replace(
+      /<iframe(.*?)src="(.*?)youtube\.com\/embed\/(.*?)"(.*?)>/gi,
+      `<div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; margin: 1rem 0;">
+        <iframe$1src="https://www.youtube.com/embed/$3" 
+          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+          loading="lazy"$4>
+        </iframe>
       </div>`
     );
 
-    if (typeof window !== 'undefined') {
-      (window as any).uploadToGoogleDrive = uploadToGoogleDrive;
-    }
+    // Stil ve düzen iyileştirmeleri
+    processedHtml = `
+      <div style="font-family: system-ui, -apple-system, sans-serif;">
+        <style>
+          img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1rem auto;
+            border-radius: 8px;
+          }
+          .video-wrapper {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            margin: 1rem 0;
+          }
+          .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            line-height: 1.3;
+          }
+          p {
+            margin: 1rem 0;
+            line-height: 1.6;
+          }
+          ul, ol {
+            margin: 1rem 0;
+            padding-left: 2rem;
+          }
+          li {
+            margin: 0.5rem 0;
+          }
+        </style>
+        ${processedHtml}
+      </div>
+    `;
 
     return processedHtml;
   }, []);
 
-  const uploadToGoogleDrive = async (imageUrl: string, imageElement: HTMLImageElement) => {
-    const googleDriveApiKey = localStorage.getItem("google_drive_api_key");
-    if (!googleDriveApiKey) {
-      toast({
-        title: "Error",
-        description: "Please set your Google Drive API key in settings",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-
-      const formData = new FormData();
-      formData.append('file', blob, 'image.jpg');
-
-      const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${googleDriveApiKey}`,
-        },
-        body: formData
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload image to Google Drive');
-      }
-
-      const uploadResult = await uploadResponse.json();
-      
-      const shareResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${uploadResult.id}?fields=webContentLink`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${googleDriveApiKey}`,
-        }
-      });
-
-      if (!shareResponse.ok) {
-        throw new Error('Failed to get share link');
-      }
-
-      const shareResult = await shareResponse.json();
-      imageElement.src = shareResult.webContentLink;
-      
-      toast({
-        title: "Success",
-        description: "Image successfully backed up to Google Drive",
-      });
-
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to upload image to Google Drive",
-        variant: "destructive",
-      });
-    }
-  };
+  const extractTitle = useCallback((html: string): string => {
+    const match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
+    return match ? match[1].replace(/<[^>]*>/g, '') : "Untitled Article";
+  }, []);
 
   useEffect(() => {
     if (!articleId || isSaved === articleId) return;
@@ -181,32 +165,111 @@ export function ArticleOutput({ articleId, apiKey, onClose, onSaveToHistory }: A
   }, [articleId, apiKey, toast, onSaveToHistory, extractTitle, processHTML, isSaved]);
 
   const handleCopy = async () => {
-    if (!article?.output?.html) return;
-    try {
-      await navigator.clipboard.writeText(article.output.html);
-      toast({
-        description: "Content copied to clipboard",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to copy content",
-        variant: "destructive",
-      });
+    if (article?.output?.html) {
+      try {
+        // Textbox oluşturup kullanıcının manuel kopyalaması için
+        const tempTextArea = document.createElement('textarea');
+        tempTextArea.value = processHTML(article.output.html);
+        document.body.appendChild(tempTextArea);
+        tempTextArea.select();
+        
+        try {
+          await navigator.clipboard.writeText(tempTextArea.value);
+          toast({
+            title: "Success",
+            description: "Article copied to clipboard"
+          });
+        } catch (err) {
+          // Fallback: Kullanıcıdan manuel kopyalama isteme
+          document.execCommand('copy');
+          toast({
+            title: "Success",
+            description: "Article copied to clipboard (manual copy)"
+          });
+        }
+        
+        document.body.removeChild(tempTextArea);
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Failed to copy. Please try selecting and copying manually.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
   const handleDownload = () => {
-    if (!article?.output?.html) return;
-    const blob = new Blob([article.output.html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'article.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (article?.output?.html) {
+      const title = extractTitle(article.output.html);
+      const processedHtml = processHTML(article.output.html);
+      const formattedHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${title}</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 
+                         Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              line-height: 1.6;
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            img {
+              max-width: 100%;
+              height: auto;
+              margin: 20px auto;
+              display: block;
+              border-radius: 8px;
+            }
+            .video-wrapper {
+              position: relative;
+              padding-bottom: 56.25%;
+              height: 0;
+              margin: 20px auto;
+            }
+            .video-wrapper iframe {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              border-radius: 8px;
+            }
+            h1 {
+              font-size: 2.5em;
+              margin-bottom: 0.5em;
+              line-height: 1.2;
+            }
+            h2, h3 {
+              margin-top: 1.5em;
+              margin-bottom: 0.5em;
+            }
+            p {
+              margin: 1em 0;
+            }
+          </style>
+        </head>
+        <body>
+          ${processedHtml}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob([formattedHtml], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   if (!article) return null;

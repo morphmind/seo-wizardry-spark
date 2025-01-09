@@ -1,4 +1,4 @@
-import { Control, Controller, useFormContext } from "react-hook-form";
+import { Control, Controller } from "react-hook-form";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,8 +13,6 @@ interface ModelAndTypeSelectorProps {
 }
 
 export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndTypeSelectorProps) {
-  const { setValue } = useFormContext<FormValues>();
-
   const extractKeywordFromURL = (url: string) => {
     try {
       const urlPath = new URL(url).pathname;
@@ -32,14 +30,6 @@ export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndType
     } catch (error) {
       console.error('Error extracting keyword:', error);
       return '';
-    }
-  };
-
-  const handleArticleUrlChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
-    field.onChange(e);
-    const keyword = extractKeywordFromURL(e.target.value);
-    if (keyword) {
-      setValue('targetKeyword', keyword, { shouldValidate: true });
     }
   };
 
@@ -277,7 +267,13 @@ export function ModelAndTypeSelector({ control, watchArticleType }: ModelAndType
                   {...field}
                   value={field.value || ""}
                   placeholder="https://..."
-                  onChange={(e) => handleArticleUrlChange(e, field)}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    const keyword = extractKeywordFromURL(e.target.value);
+                    if (keyword) {
+                      control.setValue('targetKeyword', keyword);
+                    }
+                  }}
                 />
               )}
             />
