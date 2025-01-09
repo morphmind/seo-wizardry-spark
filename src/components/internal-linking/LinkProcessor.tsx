@@ -85,7 +85,7 @@ export const useContentProcessor = () => {
         border-left: 3px solid var(--primary-color, #7952b3);
         border-radius: 3px;
         font-style: italic;
-        color: var(--text-color, #000000);
+     /* color: var(--text-color, #000000); */
         position: relative;
         transition: all 0.3s ease;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -139,7 +139,7 @@ export const useContentProcessor = () => {
         .related-content {
           --bg-color: rgba(121, 82, 179, 0.1);
           --bg-hover-color: rgba(121, 82, 179, 0.15);
-          --text-color: #000000;
+       /* --text-color: #000000; */
           --primary-color: #9b6fdf;
           --primary-dark-color: #b794f4;
         }
