@@ -1,41 +1,62 @@
 import { Platform, Orientation, GeneratedPrompts } from "../types";
 
-const generateSystemPrompt = (platform: Platform, orientation: Orientation) => `
-You are a professional image prompt engineer for Recraft.ai API v2. Create 2 variations of image generation prompts for ${platform}, considering these factors:
+const generateBasePrompt = (topic: string, platform: Platform, orientation: Orientation) => {
+  const orientationText = orientation === "vertical" ? "vertical composition" : "horizontal composition";
+  return `Create a visually striking and professional ${platform}-optimized image for the following topic: "${topic}".
 
-Orientation: ${orientation}
-Guidelines for both prompts:
-1. Focus on visual aesthetics that work well on ${platform}
-2. Optimize composition for ${orientation} orientation
-3. Include artistic style, mood, lighting, and key visual elements
-4. Keep each prompt under 800 characters
-5. Include specific details about colors, textures, and atmosphere
-6. For social media appeal, emphasize vibrant and engaging visuals
-
-Variations needed:
-1. First prompt: Include space for text overlay, considering typical ${platform} text placement
-2. Second prompt: Design without text space, focusing purely on visual impact
-
-Return the prompts in this exact format:
-[PROMPT WITH TEXT]
-first prompt here
-
-[PROMPT WITHOUT TEXT]
-second prompt here`;
-
-const generateUserPrompt = (topic: string) => `Create two prompts for: ${topic}`;
+Key requirements:
+- Optimize for ${orientationText}
+- Create a high-impact, attention-grabbing visual
+- Ensure professional quality and brand-appropriate aesthetics
+- Use relevant color schemes and visual elements
+- Focus on the core message and visual storytelling
+- Maintain platform-specific best practices for ${platform}`;
+};
 
 export const generateImagePrompts = async (
   platform: Platform,
   orientation: Orientation,
   topic: string
-): Promise<GeneratedPrompts | null> => {
-  const apiKey = localStorage.getItem("openai_api_key");
-  if (!apiKey) {
-    throw new Error("OpenAI API key is required");
-  }
+): Promise<GeneratedPrompts> => {
+  const basePrompt = generateBasePrompt(topic, platform, orientation);
+  
+  const withTextPrompt = `${basePrompt}
+
+Additional requirements for version with text:
+- Include clear space for text overlay
+- Balance visual elements with text placement
+- Ensure readability and contrast for text areas
+- Create visual hierarchy that supports text integration
+
+Describe the image in detail, focusing on:
+1. Main subject and composition
+2. Color palette and mood
+3. Lighting and atmosphere
+4. Specific visual elements and their arrangement
+5. Text placement considerations`;
+
+  const withoutTextPrompt = `${basePrompt}
+
+Create a standalone visual that needs no text to convey the message:
+1. Focus on creating a clear, immediate visual impact
+2. Use symbolic and representative elements
+3. Ensure the core message is conveyed purely through visuals
+4. Create a cohesive and balanced composition
+5. Emphasize storytelling through imagery alone
+
+Describe the image in detail, focusing on:
+1. Main subject and focal points
+2. Visual symbolism and metaphors
+3. Color psychology and emotional impact
+4. Composition and visual flow
+5. Lighting and atmospheric elements`;
 
   try {
+    const apiKey = localStorage.getItem("openai_api_key");
+    if (!apiKey) {
+      throw new Error("OpenAI API key is required");
+    }
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -43,15 +64,19 @@ export const generateImagePrompts = async (
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
-            content: generateSystemPrompt(platform, orientation)
+            content: "You are a professional image prompt engineer specializing in creating detailed, platform-optimized visual prompts for social media content."
           },
           {
             role: "user",
-            content: generateUserPrompt(topic)
+            content: withTextPrompt
+          },
+          {
+            role: "user",
+            content: withoutTextPrompt
           }
         ],
         temperature: 0.7
@@ -63,23 +88,14 @@ export const generateImagePrompts = async (
     }
 
     const data = await response.json();
-    const content = data.choices[0].message.content;
-
-    // Parse the content
-    const withTextMatch = content.match(/\[PROMPT WITH TEXT\]\n(.*?)\n\n/s);
-    const withoutTextMatch = content.match(/\[PROMPT WITHOUT TEXT\]\n(.*?)$/s);
-
-    if (!withTextMatch || !withoutTextMatch) {
-      throw new Error('Failed to parse GPT response');
-    }
+    const [withText, withoutText] = data.choices.map((choice: any) => choice.message.content.trim());
 
     return {
-      withText: withTextMatch[1].trim(),
-      withoutText: withoutTextMatch[1].trim()
+      withText,
+      withoutText
     };
-
   } catch (error) {
-    console.error("Prompt generation error:", error);
+    console.error("Error generating prompts:", error);
     throw error;
   }
 };
